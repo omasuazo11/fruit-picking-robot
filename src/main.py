@@ -142,24 +142,24 @@ def detect_fruit():
     green = ai_vision_5.take_snapshot(ai_vision_5__Green)
     orange = ai_vision_5.take_snapshot(ai_vision_5__Orange)
     yellow = ai_vision_5.take_snapshot(ai_vision_5__Yellow)
-    max_height = 60
+    max_height = 50
     color = NO_COLOR
     max_fruit = None
     if green:
         for fruit in green:
-            if fruit.height > max_height:
+            if fruit.height > max_height and fruit.height < 300 and fruit.centerY < 350:
                 max_fruit = fruit
                 max_height = fruit.height
                 color = GREEN
     if orange:
         for fruit in orange:
-            if fruit.height > max_height:
+            if fruit.height > max_height and fruit.height < 300 and fruit.centerY < 350:
                 max_fruit = fruit
                 max_height = fruit.height
                 color = ORANGE
     if yellow:
         for fruit in yellow:
-            if fruit.height > max_height:
+            if fruit.height > max_height and fruit.height < 300 and fruit.centerY < 350:
                 max_fruit = fruit
                 max_height = fruit.height 
                 color = YELLOW
@@ -206,9 +206,9 @@ rangeFinderLeft = Sonar(brain.three_wire_port.e)
 inertial_sensor = Inertial(Ports.PORT8)
 line_left = Line(brain.three_wire_port.d)
 line_right = Line(brain.three_wire_port.c)
-ai_vision_5__Green = Colordesc(1, 28, 102, 57, 28, 0.46)
-ai_vision_5__Yellow = Colordesc(2, 139, 75, 37, 19, 0.23)
-ai_vision_5__Orange = Colordesc(3, 180, 18, 40, 10, 0.3)
+ai_vision_5__Green = Colordesc(1, 44, 233, 120, 30, 0.57)
+ai_vision_5__Yellow = Colordesc(2, 247, 189, 109, 14, 0.12)
+ai_vision_5__Orange = Colordesc(3, 244, 122, 115, 10, 0.37)
 # AI Vision Code Descriptions
 ai_vision_5 = AiVision(Ports.PORT7, ai_vision_5__Green, ai_vision_5__Orange, ai_vision_5__Yellow, AiVision.ALL_TAGS)
 #driveStraightInches(108)
@@ -240,7 +240,7 @@ wait(2000)
 pitch = inertial_sensor.orientation(OrientationType.ROLL)
 brain.screen.clear_screen()
 
-#Go up the ramp
+# Go up the ramp
 x=1
 dir = 1
 while(x<11000):
@@ -257,19 +257,6 @@ while(x<11000):
     x+=1
     if (x % 300 == 0):
         dir *= 1
-# =---------------------------------------------------------------------------------------------------
-# while(not(get_line_component() == (0,0))):
-#     print_to_brain()
-#     rotation = inertial_sensor.rotation()
-#     pitch = inertial_sensor.orientation(OrientationType.ROLL)
-#     distance_front = rangeFinderFront.distance(DistanceUnits.IN)
-#     distance_left = rangeFinderLeft.distance(DistanceUnits.IN)
-#     left_speed_rot, right_speed_rot = get_rotation_component()
-#     left_motor.spin(FORWARD, left_speed_rot + 100, RPM)
-#     right_motor.spin(FORWARD, right_speed_rot + 100, RPM)
-#     center_motor.spin(FORWARD, -(5 - math.cos(rotation * math.pi/180) * distance_left)*K_PS, RPM)
-#     move(FORWARD)
-# ----------------------------------------------------------------------------------------------------
 brake()
 center_motor.spin_for(REVERSE, 2.2, TURNS, True)
 turnInPlace(90 - inertial_sensor.rotation())
@@ -292,8 +279,9 @@ while(True):
     if (state == FINDING_TREE_STATE):
         tag = detect_tag()
         move(FORWARD)
-        if within_range(tag[1], X_CENTER + 100, 45):
+        if within_range(tag[1], X_CENTER + 60, 35) and (tag[0] == old_tag+1 or (old_tag == 1 and tag[0] == 3)):
             brake()
+            elevator_direction = FORWARD
             state = RAISING_ARM_STATE
             old_tag = tag[0]
             turnInPlace(-rotation)
@@ -303,26 +291,34 @@ while(True):
     elif (state == RAISING_ARM_STATE):
         (color, fruit) = detect_fruit()
         # raise arm
-        elevator_motor.spin(FORWARD, 10, RPM)
-        if fruit and within_range(fruit.centerY, Y_CENTER+45, 5):
+        if (elevator_motor.position() > 890):
+            elevator_motor.spin_to_position(0)
+            center_motor.spin_for(FORWARD, MOTOR_DEGREES_PER_INCH * (rangeFinderLeft.distance(DistanceUnits.IN) - 4), DEGREES, 80, RPM, True)
+            left_motor.spin_for(REVERSE, MOTOR_DEGREES_PER_INCH*12, DEGREES, False)
+            right_motor.spin_for(REVERSE, MOTOR_DEGREES_PER_INCH*12, DEGREES, True)
+            old_tag -= 1
+            state = FINDING_TREE_STATE
+            continue
+
+        elevator_motor.spin(FORWARD, 10, RPM)        
+        if fruit and fruit.centerY > Y_CENTER + 20:
             elevator_motor.stop(BRAKE)
             state = ALIGNING_STATE
-            elevator_motor.stop(BRAKE)
     # Vertically align with tallest fruit
     elif (state == ALIGNING_STATE):
         move(REVERSE)
         (color, fruit) = detect_fruit()
-        if (fruit and within_range(fruit.centerX, X_CENTER, 20)):
+        if (fruit and within_range(fruit.centerX, X_CENTER, 25)):
             brake()
             state = STRAFING_STATE
     # Strafe towards tallest fruit
     elif (state == STRAFING_STATE):
         (color, fruit) = detect_fruit()
         if (fruit):
-            center_motor.spin(REVERSE, (150-fruit.height)*0.5, RPM)
-            if within_range(fruit.height, 155, 32):
+            center_motor.spin(REVERSE, (145-fruit.height)*0.5, RPM)
+            if fruit.height > 138 and fruit.height < 300:
                 center_motor.stop(BRAKE)
-                elevator_motor.spin_for(FORWARD, 40, DEGREES, True)
+                elevator_motor.spin_for(FORWARD, 55, DEGREES, True)
                 state = GRABBING_STATE
     # Close claw
     elif (state == GRABBING_STATE):
@@ -331,23 +327,28 @@ while(True):
         state = LOWERING_STATE
     # Lower elevator
     elif (state == LOWERING_STATE):
-        elevator_motor.spin_to_position(0)
-        state = SORTING_STATE
-        grabbing_motor.spin(FORWARD, 1.5, VOLT)
+        elevator_motor.spin_to_position(0, DEGREES, wait=True)
+        (color, fruit) = detect_fruit()
+        if color == NO_COLOR or (fruit and not within_range(fruit.centerX, X_CENTER, 45) and not within_range(fruit.centerY, Y_CENTER, 35)):
+            center_motor.spin_for(FORWARD, MOTOR_DEGREES_PER_INCH * (rangeFinderLeft.distance(DistanceUnits.IN) - 4), DEGREES, 80, RPM, True)
+            left_motor.spin_for(REVERSE, MOTOR_DEGREES_PER_INCH*12, DEGREES, False)
+            right_motor.spin_for(REVERSE, MOTOR_DEGREES_PER_INCH*12, DEGREES, True)
+            old_tag -= 1
+            grabbing_motor.spin_for(REVERSE, 230, DEGREES)
+            state = FINDING_TREE_STATE
+        else:
+            state = SORTING_STATE
+            grabbing_motor.spin(FORWARD, 1.5, VOLT)
     # Deposit fruit into bin at the end, go until bin is close enough
     elif (state == SORTING_STATE):
         move(FORWARD)
         color = detect_fruit()[0]
-        if (color == NO_COLOR):
-            state = FINDING_TREE_STATE
-            old_tag -= 1
-            grabbing_motor.spin_for(REVERSE, 210, DEGREES, True)
         if within_range(distance_front, 4, 0.75):
             brake()
             center_motor.spin_for(FORWARD, 30, DEGREES, True)
             turnInPlace(90 - inertial_sensor.rotation())
             center_motor.spin_for(REVERSE, 30, DEGREES, True)
-            grabbing_motor.spin_for(REVERSE, 210, DEGREES, True)
+            grabbing_motor.spin_for(REVERSE, 230, DEGREES, True)
             # Switch lanes
             if (tag[0] == 2):
                 turnInPlace(-90)
@@ -356,8 +357,11 @@ while(True):
                 center_motor.spin_for(FORWARD, 2, TURNS, 100, RPM, True)
                 state = FINDING_TREE_STATE
                 inertial_sensor.reset_rotation()
+                old_tag = -1
             # Tag with id 3 means we're done
             elif (tag[0] == 3):
+                brain.screen.clear_screen()
+                brain.screen.print("DONEEEEE")
                 sys.exit(0)
             # Go back 
             else:
@@ -369,9 +373,12 @@ while(True):
     elif (state == REVERSE_STATE):
         tag = detect_tag()
         move(REVERSE)
-        if (within_range(tag[1], X_CENTER + 100, 45) and tag[0] == old_tag + 1 or (old_tag == 1 and tag[0] == 3)):
+        if (within_range(tag[1], X_CENTER + 60, 35) and tag[0] == old_tag + 1 or (old_tag == 1 and tag[0] == 3)):
             state = RAISING_ARM_STATE
             old_tag = tag[0]
+            turnInPlace(-rotation)
+            inertial_sensor.reset_rotation()
+            center_motor.spin_for(FORWARD, MOTOR_DEGREES_PER_INCH * (rangeFinderLeft.distance(DistanceUnits.IN) - 2), DEGREES, 150, RPM, True)
             brake()
                 
 
