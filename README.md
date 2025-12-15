@@ -1,0 +1,1 @@
+Fruit Picking robot project for robotics class. The robot searches for fruits of 2 different sizes at 8 different heights on various trees, picks them off the tree, and sorts them into boxes based on color.
